@@ -1,0 +1,70 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Ripe Market · Staff Tablet</title>
+<link rel="stylesheet" href="style.css"></head><body>
+<main id="app"></main>
+<script src="common.js"></script>
+<script>
+const KEY = 'rm_staff_pin', COLORS = ['#127748','#e8a317','#2f6b3a','#d9531e','#6b2d5c','#1f5f7a','#b5651d','#a01c4a'];
+let slots = [], cur = null, rot = 0;
+
+function gate(msg=''){
+  $('#app').innerHTML = `${logo()}<h1>Staff sign-in</h1><div class="card"><label>Staff PIN</label><input id="pn" type="password" inputmode="numeric"><div class="err" id="er">${esc(msg)}</div><button class="btn" id="ok">Continue</button></div>`;
+  $('#ok').onclick = async () => {
+    sessionStorage.setItem(KEY, $('#pn').value);
+    const r = await api('config', {}, KEY);
+    if (!r.ok) { sessionStorage.removeItem(KEY); return $('#er').textContent = r.error; }
+    slots = r.slots; screen1();
+  };
+}
+
+/* SCREEN 1: enter customer code */
+async function screen1(){
+  const r = await api('config', {}, KEY);
+  if (!r.ok) return gate(r.error); slots = r.slots; cur = null;
+  $('#app').innerHTML = `${logo()}<h1>Customer code</h1><p class="sub">Enter the customer's code to unlock a spin.</p>
+  <div class="card"><div class="row"><input id="cd" placeholder="RM-XXXXX" autocapitalize="characters" style="font-size:22px;text-transform:uppercase"><button class="btn gold" id="un" style="margin:0">Unlock</button></div><div class="err" id="er"></div></div>`;
+  const go = async () => {
+    const code = $('#cd').value.trim().toUpperCase(); if (!code) return;
+    const r = await api('check', {code}, KEY);
+    if (r.status === 401) return gate('PIN expired. Sign in again.');
+    if (!r.ok) return $('#er').textContent = r.error;
+    cur = code; screen2(r.name);
+  };
+  $('#un').onclick = go; $('#cd').addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+}
+
+/* SCREEN 2: spin the wheel */
+function drawWheel(c, list){
+  const x = c.getContext('2d'), S = c.width, R = S/2, a = 2*Math.PI/list.length; x.clearRect(0,0,S,S);
+  list.forEach((s,i) => {
+    x.beginPath(); x.moveTo(R,R); x.arc(R,R,R-4,-Math.PI/2+i*a,-Math.PI/2+(i+1)*a);
+    x.fillStyle = COLORS[i%COLORS.length]; x.fill(); x.strokeStyle = '#fff'; x.lineWidth = 3; x.stroke();
+    x.save(); x.translate(R,R); x.rotate(-Math.PI/2+(i+.5)*a); x.textAlign = 'right'; x.fillStyle = '#fff'; x.font = '600 '+S/28+'px system-ui,sans-serif';
+    x.fillText(s.prize.length > 22 ? s.prize.slice(0,21)+'…' : s.prize, R-18, S/90); x.restore();
+  });
+}
+function screen2(name){
+  rot = 0;
+  $('#app').innerHTML = `${logo()}<h1>Good luck, ${esc(name)}!</h1>
+  <div class="wheelbox"><div class="ptr"></div><canvas id="w" width="900" height="900"></canvas></div>
+  <div class="res" id="rs">&nbsp;</div>
+  <button class="btn" id="sp" style="max-width:340px;margin:0 auto">Spin</button>
+  <button class="btn gold hide" id="nx" style="max-width:340px;margin:12px auto 0">Next customer</button>`;
+  drawWheel($('#w'), slots);
+  $('#sp').onclick = async () => {
+    $('#sp').disabled = true; $('#rs').innerHTML = '&nbsp;';
+    const r = await api('spin', {code:cur}, KEY);
+    if (!r.ok) { $('#rs').textContent = r.error; return; }
+    const seg = 360/slots.length, jitter = (Math.random()-.5)*seg*.7;
+    const target = (360 - (r.index*seg + seg/2) + 360) % 360, delta = (target - (rot % 360) + 360) % 360;
+    rot += 1800 + delta + jitter;
+    $('#w').style.transform = `rotate(${rot}deg)`;
+    setTimeout(() => {
+      $('#rs').innerHTML = r.another ? 'Try Again – spin once more!' : '🎉 ' + esc(r.prize);
+      if (r.another) $('#sp').disabled = false; else { $('#sp').classList.add('hide'); $('#nx').classList.remove('hide'); }
+    }, 5200);
+  };
+  $('#nx').onclick = screen1;
+}
+sessionStorage.getItem(KEY) ? screen1() : gate();
+</script></body></html>

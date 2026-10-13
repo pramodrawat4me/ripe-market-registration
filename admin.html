@@ -1,0 +1,61 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Ripe Market · Admin</title>
+<link rel="stylesheet" href="style.css"></head><body>
+<main id="app" class="wide"></main>
+<script src="common.js"></script>
+<script>
+const KEY = 'rm_admin_pin'; let slots = [], rows = [];
+
+function gate(msg=''){
+  $('#app').innerHTML = `<div style="max-width:420px;margin:0 auto">${logo()}<h1>Admin sign-in</h1><div class="card"><label>Admin PIN</label><input id="pn" type="password"><div class="err" id="er">${esc(msg)}</div><button class="btn" id="ok">Continue</button></div></div>`;
+  $('#ok').onclick = () => { sessionStorage.setItem(KEY, $('#pn').value); load(); };
+}
+async function load(){
+  const [l, s] = await Promise.all([api('list', {}, KEY), api('slots', {}, KEY)]);
+  if (!l.ok) { sessionStorage.removeItem(KEY); return gate(l.error); }
+  rows = l.rows; slots = s.slots.map(x => ({prize:x.prize, chance:Number(x.chance), retry:!!Number(x.retry)})); render();
+}
+function render(){
+  $('#app').innerHTML = `<h1>Admin</h1>
+  <div class="card"><b>Wheel prizes &amp; win chances</b>
+    <div class="scroll"><table><tr><th>#</th><th>Prize</th><th>Win %</th><th>Extra spin?</th><th></th></tr>
+    ${slots.map((s,i)=>`<tr><td>${i+1}</td><td><input data-i="${i}" data-k="prize" value="${esc(s.prize)}"></td>
+      <td><input data-i="${i}" data-k="chance" type="number" step="0.5" min="0" value="${s.chance}" style="width:80px"></td>
+      <td><input type="checkbox" data-i="${i}" data-k="retry" ${s.retry?'checked':''} style="width:auto"></td>
+      <td><button class="btn sm red" onclick="delSlot(${i})">✕</button></td></tr>`).join('')}</table></div>
+    <button class="btn sm gold" style="margin-top:12px" onclick="addSlot()">+ Add prize</button>
+    <p id="tt" style="font:700 15px system-ui"></p><div class="err" id="er"></div><button class="btn" id="sv">Save wheel</button></div>
+  <div class="card"><b>Registrations (${rows.length})</b>
+    <div class="row" style="margin:10px 0"><input id="q" placeholder="Search name / phone / code / email"><button class="btn gold" style="margin:0;max-width:170px" onclick="csv()">Export CSV</button></div>
+    <div class="scroll"><table id="rt"></table></div></div>`;
+  document.querySelectorAll('td input[data-k]').forEach(el => el.oninput = () => {
+    const s = slots[el.dataset.i], k = el.dataset.k;
+    s[k] = k==='retry' ? el.checked : k==='chance' ? Number(el.value) : el.value; total();
+  });
+  $('#sv').onclick = save; $('#q').oninput = drawRows; total(); drawRows();
+}
+const sum = () => slots.reduce((a,s)=>a+Number(s.chance||0),0);
+function total(){ const t = Math.round(sum()*100)/100, ok = Math.abs(t-100)<.01;
+  $('#tt').innerHTML = `Total: ${t}% ` + (ok ? '<span class="ok">✓</span>' : '<span class="err">must equal 100%</span>'); $('#sv').disabled = !ok; }
+function addSlot(){ if (slots.length>=12) return; slots.push({prize:'New prize',chance:0,retry:false}); render(); }
+function delSlot(i){ if (slots.length<=2) return; slots.splice(i,1); render(); }
+async function save(){
+  const r = await api('save_slots', {slots}, KEY);
+  if (!r.ok) return $('#er').textContent = r.error;
+  $('#sv').textContent = 'Saved ✓'; setTimeout(()=>$('#sv').textContent='Save wheel', 1500);
+}
+function drawRows(){
+  const q = ($('#q').value||'').toLowerCase();
+  const f = rows.filter(r => [r.code,r.name,r.phone,r.email].join(' ').toLowerCase().includes(q));
+  $('#rt').innerHTML = `<tr><th>Code</th><th>Name</th><th>Phone</th><th>Email</th><th>Registered</th><th>Prize</th><th>Used</th><th></th></tr>` +
+  f.map(r=>`<tr><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.phone)}</td><td>${esc(r.email)}</td><td>${esc(r.created_at)}</td><td>${esc(r.prize)}</td><td>${esc(r.used)}</td>
+   <td style="white-space:nowrap"><button class="btn sm gold" onclick="act('reset_code',${r.id},'Reset this code so it can spin again?')">Reset</button><button class="btn sm red" onclick="act('delete_reg',${r.id},'Delete this registration?')">Delete</button></td></tr>`).join('');
+}
+async function act(a,id,msg){ if (!confirm(msg)) return; const r = await api(a,{id},KEY); if (r.ok) load(); else alert(r.error); }
+function csv(){
+  const h = ['code','name','phone','email','address','created_at','prize','used','spins'];
+  const c = [h.join(',')].concat(rows.map(r => h.map(k => '"'+String(r[k]??'').replace(/"/g,'""')+'"').join(',')));
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([c.join('\n')],{type:'text/csv'})); a.download = 'registrations.csv'; a.click();
+}
+sessionStorage.getItem(KEY) ? load() : gate();
+</script></body></html>

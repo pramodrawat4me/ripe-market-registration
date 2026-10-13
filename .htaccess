@@ -1,0 +1,5 @@
+# Block direct browser access to private files (PHP still includes them internally)
+<FilesMatch "^(config|mail|register)\.php$|\.(sql|md|log)$">
+  Require all denied
+</FilesMatch>
+Options -Indexes

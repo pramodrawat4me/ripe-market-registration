@@ -1,0 +1,29 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Ripe Market · Register</title>
+<link rel="stylesheet" href="style.css"></head><body>
+<main id="app"></main>
+<script src="common.js"></script>
+<script>
+function form(){
+  $('#app').innerHTML = `${logo()}<h1>Ripe Market</h1><p class="sub">Register to unlock your spin of the wheel!</p>
+  <form id="f" class="card" novalidate>
+    <label>Name<span>*</span></label><input id="n" autocomplete="name" required>
+    <label>Phone Number<span>*</span></label><input id="p" type="tel" autocomplete="tel" required>
+    <label>Email<span>*</span></label><input id="e" type="email" autocomplete="email" required>
+    <label>Address</label><textarea id="a" rows="2" autocomplete="street-address" required></textarea>
+    <div class="err" id="er"></div><button class="btn" id="b">Register</button></form>`;
+  $('#f').onsubmit = async ev => {
+    ev.preventDefault();
+    const d = { name:$('#n').value.trim(), phone:$('#p').value.trim(), email:$('#e').value.trim(), address:$('#a').value.trim() };
+    if (Object.values(d).some(v => !v)) return $('#er').textContent = 'Please fill in all fields.';
+    if (!/^\S+@\S+\.\S+$/.test(d.email)) return $('#er').textContent = 'Please enter a valid email.';
+    if (d.phone.replace(/\D/g,'').length < 7) return $('#er').textContent = 'Please enter a valid phone number.';
+    $('#b').disabled = true; $('#b').textContent = 'Please wait…'; $('#er').textContent = '';
+    const r = await api('register', d);
+    if (!r.ok) { $('#er').textContent = r.error || 'Something went wrong.'; $('#b').disabled = false; $('#b').textContent = 'Register'; return; }
+    $('#app').innerHTML = `${logo()}<h1>You're in, ${esc(d.name.split(' ')[0])}!</h1><p class="sub">Show this code to our team at the stall to spin the wheel.</p>
+      <div class="card"><div class="code">${esc(r.code)}</div>${r.emailSent ? `<p class="sub" style="display:block">We've also emailed it to ${esc(d.email)}.</p>` : ''}</div>`;
+  };
+}
+form();
+</script></body></html>
